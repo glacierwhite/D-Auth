@@ -11,20 +11,14 @@ The synthesized data together with the (limited) real data are then used to trai
 First create a new conda environment
 
     conda env create -f environment.yml
-    conda activate ldm
+    conda activate vit
 
 ## ☕️ : Training
-You should first download the pretrained weights of [Stable Diffusion](https://huggingface.co/runwayml/stable-diffusion-v1-5/blob/main/v1-5-pruned.ckpt) and put it to `./ckpt/` folder. Then, you can get the initial weights for training by:
+You can train the model by:
 
-    python utils/prepare_weights.py init_local ckpt/v1-5-pruned.ckpt configs/config.yaml ckpt/init.ckpt
+    python src/train.py
 
-The 4 arguments are mode, pretrained SD weights, model configs and output path for the initial weights.
+## 💻 : Test
+You can test the model by:
 
-Now, you can train with you own data simply by:
-
-    python src/train/train.py
-
-## 💻 : Generation
-You can launch the generation by:
-
-    python src/generate/generate.py
+    python src/test.py
