@@ -2,7 +2,7 @@
 
 ## 💡 : Method
 <div align="center">
-<img width="800" alt="image" src="./figs/pipeline.png">
+<img width="800" alt="image" src="./figs/ldm.pdf">
 </div>
 
 ... 
