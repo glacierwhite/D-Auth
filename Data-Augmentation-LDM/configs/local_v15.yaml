@@ -1,0 +1,119 @@
+model:
+  target: models.uni_controlnet.UniControlNet
+  params:
+    linear_start: 0.0015 #0.00085
+    linear_end: 0.0195 #0.0120
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    #first_stage_key: "jpg"
+    #cond_stage_key: "txt"
+    first_stage_key: "fbank"
+    cond_stage_key: "waveform"
+    # ************Modified by Long************
+    #image_size: 64
+    latent_t_size: 256
+    latent_f_size: 16
+    # ************Modified by Long************
+    channels: 8 #4
+    cond_stage_trainable: false
+    conditioning_key: crossattn
+    monitor: val/loss_simple_ema
+    scale_factor: 0.18215
+    use_ema: False
+    mode: local
+
+    local_control_config:
+      target: models.local_adapter.LocalAdapter
+      params:
+        #extra_film_condition_dim: 512
+        #extra_film_use_concat: True
+        in_channels: 8 #4
+        model_channels: 192 #320
+        local_channels: 21
+        inject_channels: [192, 256, 384, 512]
+        inject_layers: [1, 4, 7, 10]
+        num_res_blocks: 2
+        attention_resolutions: [8, 4, 2] #[4, 2, 1]
+        channel_mult: [1, 2, 3, 5] #[1, 2, 4, 4]
+        use_checkpoint: True
+        #num_heads: 8
+        num_head_channels: 32
+        use_spatial_transformer: True
+        transformer_depth: 1
+        context_dim: 512 #768
+        legacy: False
+
+    unet_config:
+      target: models.local_adapter.LocalControlUNetModel #ldm.modules.diffusionmodules.openaimodel.UNetModel
+      params:
+        image_size: 64 #32
+        extra_film_condition_dim: 512
+        extra_film_use_concat: False #True
+        in_channels: 8 #4
+        model_channels: 192 #320
+        out_channels: 8 #4
+        num_res_blocks: 2
+        attention_resolutions: [8, 4, 2] #[4, 2, 1]
+        channel_mult: [1, 2, 3, 5] #[1, 2, 4, 4]
+        use_checkpoint: True
+        #num_heads: 8
+        num_head_channels: 32
+        use_spatial_transformer: True
+        transformer_depth: 1
+        context_dim: 512 #768
+        legacy: False
+
+    first_stage_config:
+      base_learning_rate: 4.5e-05
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 8 #4
+        monitor: val/rec_loss
+        image_key: "fbank"
+        subband: 1
+        time_shuffle: 1
+        ddconfig:
+          double_z: true
+          z_channels: 8 #4
+          resolution: 256
+          downsample_time: False
+          in_channels: 1 #3
+          out_ch: 1 #3
+          ch: 128
+          ch_mult:
+          - 1
+          - 2
+          - 4
+          - 4
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+
+    cond_stage_config:
+      #target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
+      target: clap.encoders.CLAPAudioEmbeddingClassifierFreev2
+      params:
+        key: "waveform"
+        sampling_rate: 16000
+        embed_mode: "audio"
+        unconditional_prob: 0.1
+
+data:
+  target: src.train.dataset.UniDataset
+  params:
+    #anno_path: ./data/anno.txt
+    #image_dir: ./data/images
+    audio_dir: ./data/AudioCaps
+    #condition_root: ./data/conditions
+    #local_type_list: [canny, mlsd, hed, sketch, openpose, midas, seg]
+    local_type_list: [style]
+    global_type_list: []
+    resolution: 512
+    drop_txt_prob: 0.5
+    keep_all_cond_prob: 0.1
+    drop_all_cond_prob: 0.1
+    #drop_each_cond_prob: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    drop_each_cond_prob: [0.5]
