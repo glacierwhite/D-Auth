@@ -5,7 +5,7 @@
 <img width="600" alt="image" src="./figs/vit.png">
 </div>
 
-During the training phase, the motion sensor data collected from a limited set of drivers (which we call the *training drivers*) are first used to train the ***Data Augmentation LDM***, which can generate diverse and representative synthetic data by learning the underlying distribution of the real data.
+The synthesized data together with the (limited) real data are then used to train the ***ViT-Based Driver Embedding Extractor***, which learns the mapping from the spectrogram of the motion sensor data to embeddings such that the spectrogram embeddings of the same driver are pulled together, while the spectrogram embeddings of distinct drivers are pushed away.
 
 ## ⚙ : Setup
 First create a new conda environment
