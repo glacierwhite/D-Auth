@@ -1,11 +1,11 @@
 ## D-Auth: Driver Authentication via Car-Speaker-Induced Vibration
 
-## 💡 : Method
+## 🏛️ : Architecture
 <div align="center">
 <img width="800" alt="image" src="./pipeline.png">
 </div>
 
-... 
+D-Auth is involved with three phases: training, enrollment, and authentication.
 
 ## ⚙ : Setup
 First create a new conda environment
