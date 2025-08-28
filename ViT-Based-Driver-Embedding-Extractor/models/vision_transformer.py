@@ -6,27 +6,8 @@ from typing import Any, Callable, NamedTuple, Optional
 import torch
 import torch.nn as nn
 
-from ..ops.misc import Conv2dNormActivation, MLP
-from ..transforms._presets import ImageClassification, InterpolationMode
-from ..utils import _log_api_usage_once
-from ._api import register_model, Weights, WeightsEnum
-from ._meta import _IMAGENET_CATEGORIES
-from ._utils import _ovewrite_named_param, handle_legacy_interface
-
-
-__all__ = [
-    "VisionTransformer",
-    "ViT_B_16_Weights",
-    "ViT_B_32_Weights",
-    "ViT_L_16_Weights",
-    "ViT_L_32_Weights",
-    "ViT_H_14_Weights",
-    "vit_b_16",
-    "vit_b_32",
-    "vit_l_16",
-    "vit_l_32",
-    "vit_h_14",
-]
+from torchvision.ops.misc import Conv2dNormActivation, MLP
+from torchvision.utils import _log_api_usage_once
 
 
 class ConvStemConfig(NamedTuple):
@@ -303,35 +284,3 @@ class VisionTransformer(nn.Module):
         x = self.heads(x)
 
         return x
-
-
-def _vision_transformer(
-    patch_size: int,
-    num_layers: int,
-    num_heads: int,
-    hidden_dim: int,
-    mlp_dim: int,
-    weights: Optional[WeightsEnum],
-    progress: bool,
-    **kwargs: Any,
-) -> VisionTransformer:
-    if weights is not None:
-        _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
-        assert weights.meta["min_size"][0] == weights.meta["min_size"][1]
-        _ovewrite_named_param(kwargs, "image_size", weights.meta["min_size"][0])
-    image_size = kwargs.pop("image_size", 224)
-
-    model = VisionTransformer(
-        image_size=image_size,
-        patch_size=patch_size,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        hidden_dim=hidden_dim,
-        mlp_dim=mlp_dim,
-        **kwargs,
-    )
-
-    if weights:
-        model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
-
-    return model

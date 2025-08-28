@@ -1,4 +1,8 @@
-from models import vision_transformer
+import sys
+if './' not in sys.path:
+	sys.path.append('./')
+	
+from models.vision_transformer import VisionTransformer
 
 model = VisionTransformer(
         image_size=224,
