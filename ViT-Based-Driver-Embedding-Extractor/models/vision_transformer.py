@@ -281,6 +281,8 @@ class VisionTransformer(nn.Module):
         # Classifier "token" as used by standard language architectures
         x = x[:, 0]
 
+        embedding = x
+
         x = self.heads(x)
 
-        return x
+        return x, embedding
