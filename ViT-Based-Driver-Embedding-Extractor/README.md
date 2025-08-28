@@ -1,4 +1,4 @@
-## Data Augmentation LDM
+## ViT-Based-Driver-Embedding-Extractor
 
 ## 💡 : Method
 <div align="center">
