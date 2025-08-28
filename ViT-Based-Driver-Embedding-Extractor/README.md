@@ -1,4 +1,4 @@
-## ViT-Based-Driver-Embedding-Extractor
+## ViT-Based Driver Embedding Extractor
 
 ## 💡 : Method
 <div align="center">
