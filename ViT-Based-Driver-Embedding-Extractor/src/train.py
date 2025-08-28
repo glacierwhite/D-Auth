@@ -13,11 +13,12 @@ from models.vision_transformer import VisionTransformer
 from torch.utils.tensorboard import SummaryWriter
 from options import Options
 import torch
-from running import setup, SupervisedRunner, NEG_METRICS, validate
+from running import setup, SupervisedRunner, NEG_METRICS, validate, check_progress
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from models.loss import get_loss_module
 from optimizers import get_optimizer
+from tqdm import tqdm
 import utils
 
 def main(config):
@@ -136,6 +137,46 @@ def main(config):
                                                           best_value, epoch=0)
     metrics_names, metrics_values = zip(*aggr_metrics_val.items())
     metrics.append(list(metrics_values))
+
+    logger.info('Starting training...')
+    for epoch in tqdm(range(start_epoch + 1, config["epochs"] + 1), desc='Training Epoch', leave=False):
+        mark = epoch if config['save_all'] else 'last'
+        epoch_start_time = time.time()
+        aggr_metrics_train = trainer.train_epoch(epoch)  # dictionary of aggregate epoch metrics
+        epoch_runtime = time.time() - epoch_start_time
+        print()
+        print_str = 'Epoch {} Training Summary: '.format(epoch)
+        for k, v in aggr_metrics_train.items():
+            tensorboard_writer.add_scalar('{}/train'.format(k), v, epoch)
+            print_str += '{}: {:8f} | '.format(k, v)
+        logger.info(print_str)
+        logger.info("Epoch runtime: {} hours, {} minutes, {} seconds\n".format(*utils.readable_time(epoch_runtime)))
+        total_epoch_time += epoch_runtime
+        avg_epoch_time = total_epoch_time / (epoch - start_epoch)
+        avg_batch_time = avg_epoch_time / len(train_loader)
+        avg_sample_time = avg_epoch_time / len(train_dataset)
+        logger.info("Avg epoch train. time: {} hours, {} minutes, {} seconds".format(*utils.readable_time(avg_epoch_time)))
+        logger.info("Avg batch train. time: {} seconds".format(avg_batch_time))
+        logger.info("Avg sample train. time: {} seconds".format(avg_sample_time))
+
+        # evaluate if first or last epoch or at specified interval
+        if (epoch == config["epochs"]) or (epoch == start_epoch + 1) or (epoch % config['val_interval'] == 0):
+            aggr_metrics_val, best_metrics, best_value = validate(val_evaluator, tensorboard_writer, config,
+                                                                  best_metrics, best_value, epoch)
+            metrics_names, metrics_values = zip(*aggr_metrics_val.items())
+            metrics.append(list(metrics_values))
+
+        utils.save_model(os.path.join(config['save_dir'], 'model_{}.pth'.format(mark)), epoch, model, optimizer)
+
+        # Learning rate scheduling
+        if epoch == config['lr_step'][lr_step]:
+            utils.save_model(os.path.join(config['save_dir'], 'model_{}.pth'.format(epoch)), epoch, model, optimizer)
+            lr = lr * config['lr_factor'][lr_step]
+            if lr_step < len(config['lr_step']) - 1:  # so that this index does not get out of bounds
+                lr_step += 1
+            logger.info('Learning rate updated to: ', lr)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
 
 if __name__ == '__main__':
      

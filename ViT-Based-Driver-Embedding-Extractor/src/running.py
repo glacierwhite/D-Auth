@@ -111,6 +111,14 @@ def validate(val_evaluator, tensorboard_writer, config, best_metrics, best_value
     return aggr_metrics, best_metrics, best_value
 
 
+def check_progress(epoch):
+
+    if epoch in [100, 140, 160, 220, 280, 340]:
+        return True
+    else:
+        return False
+
+
 class BaseRunner(object):
 
     def __init__(self, model, dataloader, device, loss_module, optimizer=None, l2_reg=None, print_interval=10, console=True):
@@ -168,11 +176,10 @@ class SupervisedRunner(BaseRunner):
 
         for i, batch in enumerate(self.dataloader):
 
-            X, targets, padding_masks, IDs = batch
+            X, targets = batch
             targets = targets.to(self.device)
-            padding_masks = padding_masks.to(self.device)  # 0s: ignore
             # regression: (batch_size, num_labels); classification: (batch_size, num_classes) of logits
-            predictions = self.model(X.to(self.device), padding_masks)
+            predictions, embeddings = self.model(X.to(self.device))
 
             loss = self.loss_module(predictions, targets)  # (batch_size,) loss for each sample in the batch
             batch_loss = torch.sum(loss)

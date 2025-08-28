@@ -52,7 +52,7 @@ class Options(object):
                                        "                          transduction of features to other features,\n"
                                        "                          classification of entire time series,\n"
                                        "                          regression of scalar(s) for entire time series"))
-        self.parser.add_argument('--epochs', type=int, default=400,
+        self.parser.add_argument('--epochs', type=int, default=200,
                                  help='Number of training epochs')
         self.parser.add_argument('--val_interval', type=int, default=2,
                                  help='Evaluate on validation set every this many epochs. Must be >= 1.')
