@@ -10,9 +10,10 @@ logging.basicConfig(format='%(asctime)s | %(levelname)s : %(message)s', level=lo
 logger = logging.getLogger(__name__)
 	
 from models.vision_transformer import VisionTransformer
+from torch.utils.tensorboard import SummaryWriter
 from options import Options
 import torch
-from running import setup, SupervisedRunner
+from running import setup, SupervisedRunner, NEG_METRICS, validate
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from models.loss import get_loss_module
@@ -37,8 +38,24 @@ def main(config):
 
     device = torch.device('cuda' if (torch.cuda.is_available() and config['gpu'] != '-1') else 'cpu')
     logger.info("Using device: {}".format(device))
-    if device == 'cuda':
+    if device.type == "cuda":
         logger.info("Device index: {}".format(torch.cuda.current_device()))
+
+    # Define transformations for preprocessing the images
+    transform = transforms.Compose([
+        transforms.Resize((config['image_size'], config['image_size'])),   # resize images
+        transforms.ToTensor(),           # convert PIL image to PyTorch tensor
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                            std=[0.229, 0.224, 0.225]) # normalize like ImageNet
+    ])
+
+    # Load dataset
+    logger.info("Loading and preprocessing data ...")
+    train_dataset = datasets.ImageFolder(root= config['data_dir']+"/train", transform=transform)
+    val_dataset = datasets.ImageFolder(root=config['data_dir']+"/val", transform=transform)
+
+    logger.info("{} samples may be used for training".format(len(train_dataset)))
+    logger.info("{} samples will be used for validation".format(len(val_dataset)))
 
     # Create model
     logger.info("Creating model ...")
@@ -83,27 +100,17 @@ def main(config):
 
     loss_module = get_loss_module(config)
 
-    # Define transformations for preprocessing the images
-    transform = transforms.Compose([
-        transforms.Resize((config['image_size'], config['image_size'])),   # resize images
-        transforms.ToTensor(),           # convert PIL image to PyTorch tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                            std=[0.229, 0.224, 0.225]) # normalize like ImageNet
-    ])
-
-    # Load dataset
-    train_dataset = datasets.ImageFolder(root= config['data_dir']+"/train", transform=transform)
-    val_dataset = datasets.ImageFolder(root=config['data_dir']+"/val", transform=transform)
-
     # Create DataLoaders
     train_loader = DataLoader(dataset=train_dataset,
                             batch_size=config['batch_size'],  # number of images per batch
                             shuffle=True,   # shuffle for training
+                            drop_last=True,
                             num_workers=config['num_workers'])  # adjust for your CPU
 
-    val_loader = DataLoader(dataset=config['batch_size'],
+    val_loader = DataLoader(dataset=val_dataset,
                             batch_size=config['batch_size'],
                             shuffle=False,
+                            drop_last=True,
                             num_workers=config['num_workers'])
 
     # Example: iterate over one batch
@@ -114,6 +121,21 @@ def main(config):
 
     trainer = SupervisedRunner(model, train_loader, device, loss_module, optimizer, l2_reg=output_reg,
                                  print_interval=config['print_interval'], console=config['console'])
+    
+    val_evaluator = SupervisedRunner(model, val_loader, device, loss_module,
+                                       print_interval=config['print_interval'], console=config['console'])
+    
+    tensorboard_writer = SummaryWriter(config['tensorboard_dir'])
+
+    best_value = 1e16 if config['key_metric'] in NEG_METRICS else -1e16  # initialize with +inf or -inf depending on key metric
+    metrics = []  # (for validation) list of lists: for each epoch, stores metrics like loss, ...
+    best_metrics = {}
+
+    # Evaluate on validation before training
+    aggr_metrics_val, best_metrics, best_value = validate(val_evaluator, tensorboard_writer, config, best_metrics,
+                                                          best_value, epoch=0)
+    metrics_names, metrics_values = zip(*aggr_metrics_val.items())
+    metrics.append(list(metrics_values))
 
 if __name__ == '__main__':
      

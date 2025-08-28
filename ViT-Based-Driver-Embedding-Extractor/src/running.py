@@ -6,6 +6,7 @@ import json
 import string
 import random
 import torch
+import time
 import sklearn
 import numpy as np
 from collections import OrderedDict
@@ -15,6 +16,10 @@ import utils
 import analysis
 
 logger = logging.getLogger('__main__')
+
+NEG_METRICS = {'loss'}  # metrics for which "better" is less
+
+val_times = {"total_time": 0, "count": 0}
 
 def setup(args):
     """Prepare training session: read configuration from file (takes precedence), create directories.
@@ -62,6 +67,48 @@ def setup(args):
     logger.info("Stored configuration file in '{}'".format(output_dir))
 
     return config
+
+
+def validate(val_evaluator, tensorboard_writer, config, best_metrics, best_value, epoch):
+    """Run an evaluation on the validation set while logging metrics, and handle outcome"""
+
+    logger.info("Evaluating on validation set ...")
+    eval_start_time = time.time()
+    with torch.no_grad():
+        aggr_metrics, per_batch = val_evaluator.evaluate(epoch, keep_all=True)
+    eval_runtime = time.time() - eval_start_time
+    logger.info("Validation runtime: {} hours, {} minutes, {} seconds\n".format(*utils.readable_time(eval_runtime)))
+
+    global val_times
+    val_times["total_time"] += eval_runtime
+    val_times["count"] += 1
+    avg_val_time = val_times["total_time"] / val_times["count"]
+    avg_val_batch_time = avg_val_time / len(val_evaluator.dataloader)
+    avg_val_sample_time = avg_val_time / len(val_evaluator.dataloader.dataset)
+    logger.info("Avg val. time: {} hours, {} minutes, {} seconds".format(*utils.readable_time(avg_val_time)))
+    logger.info("Avg batch val. time: {} seconds".format(avg_val_batch_time))
+    logger.info("Avg sample val. time: {} seconds".format(avg_val_sample_time))
+
+    print()
+    print_str = 'Epoch {} Validation Summary: '.format(epoch)
+    for k, v in aggr_metrics.items():
+        tensorboard_writer.add_scalar('{}/val'.format(k), v, epoch)
+        print_str += '{}: {:8f} | '.format(k, v)
+    logger.info(print_str)
+
+    if config['key_metric'] in NEG_METRICS:
+        condition = (aggr_metrics[config['key_metric']] < best_value)
+    else:
+        condition = (aggr_metrics[config['key_metric']] > best_value)
+    if condition:
+        best_value = aggr_metrics[config['key_metric']]
+        utils.save_model(os.path.join(config['save_dir'], 'model_best.pth'), epoch, val_evaluator.model)
+        best_metrics = aggr_metrics.copy()
+
+        pred_filepath = os.path.join(config['pred_dir'], 'best_predictions')
+        np.savez(pred_filepath, **per_batch)
+
+    return aggr_metrics, best_metrics, best_value
 
 
 class BaseRunner(object):
@@ -165,14 +212,14 @@ class SupervisedRunner(BaseRunner):
         epoch_loss = 0  # total loss of epoch
         total_samples = 0  # total samples in epoch
 
-        per_batch = {'target_masks': [], 'targets': [], 'predictions': [], 'metrics': [], 'IDs': []}
+        per_batch = {'targets': [], 'predictions': [], 'metrics': [], 'embeddings': []}
         for i, batch in enumerate(self.dataloader):
 
-            X, targets, padding_masks, IDs = batch
+            X, targets = batch
             targets = targets.to(self.device)
-            padding_masks = padding_masks.to(self.device)  # 0s: ignore
-            # regression: (batch_size, num_labels); classification: (batch_size, num_classes) of logits
-            predictions = self.model(X.to(self.device), padding_masks)
+
+            predictions, embeddings = self.model(X.to(self.device))
+
 
             loss = self.loss_module(predictions, targets)  # (batch_size,) loss for each sample in the batch
             batch_loss = torch.sum(loss).cpu().item()
@@ -181,7 +228,7 @@ class SupervisedRunner(BaseRunner):
             per_batch['targets'].append(targets.cpu().numpy())
             per_batch['predictions'].append(predictions.cpu().numpy())
             per_batch['metrics'].append([loss.cpu().numpy()])
-            per_batch['IDs'].append(IDs)
+            per_batch['embeddings'].append(embeddings.cpu().numpy())
 
             metrics = {"loss": mean_loss}
             if i % self.print_interval == 0:
